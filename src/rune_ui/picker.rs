@@ -107,6 +107,9 @@ pub(super) struct Picker {
     /// The card whose details are open (Parakeet Ultra's credit and
     /// published benchmarks).
     pub(super) details: super::model_details::DetailsState,
+    /// The model in use when the picker opened, first in both views until
+    /// it closes, so choosing a model never moves the rows under the pointer.
+    pub(super) leading: Option<TranscriptionModelId>,
 }
 
 impl Picker {
@@ -141,6 +144,32 @@ pub(super) fn open(ui: &mut Ui) {
     ui.picker.supported_only = false;
     ui.picker.view = View::Compare;
     ui.picker.others_open = false;
+    lead_with_active(ui);
+}
+
+fn lead_with_active(ui: &mut Ui) {
+    ui.picker.leading = ui
+        .picker
+        .selected_installed(&ui.settings)
+        .then_some(ui.settings.transcription.model);
+}
+
+/// The model the list leads with: the one in use at open, unless Labs ›
+/// Sort and filter models orders by size or name.
+pub(super) fn leading(ui: &Ui) -> Option<TranscriptionModelId> {
+    let sorted = sort_filter_on(ui) && ui.picker.sort != Sort::Recommended;
+    ui.picker.leading.filter(|_| !sorted)
+}
+
+/// `models` with `leading` moved to the front, the rest in their order.
+fn led_by(mut models: Vec<PickerModel>, leading: Option<TranscriptionModelId>) -> Vec<PickerModel> {
+    if let Some(index) = models
+        .iter()
+        .position(|(model, _)| Some(model.id) == leading)
+    {
+        models[..=index].rotate_right(1);
+    }
+    models
 }
 
 /// Switches between the comparison and the full list.
@@ -259,13 +288,14 @@ fn arranged(language: &str, sort: Sort, supported_only: bool) -> Vec<PickerModel
 }
 
 /// The cards the picker shows: the catalog's order, or with the Lab on its
-/// sort and language toggle.
+/// sort and language toggle, led by [`leading`].
 fn shown_models(ui: &Ui, language: &str) -> Vec<PickerModel> {
-    if sort_filter_on(ui) {
+    let models = if sort_filter_on(ui) {
         arranged(language, ui.picker.sort, ui.picker.supported_only)
     } else {
         transcription_models::picker_models(language)
-    }
+    };
+    led_by(models, leading(ui))
 }
 
 /// The model the language toggle hides that still matters: the one being
@@ -418,7 +448,10 @@ pub(super) fn modal(ui: &Ui, p: Paint) -> Option<[El; 2]> {
             let entries = facts::entries(
                 ui,
                 &language,
-                &transcription_models::picker_models(&language),
+                &led_by(
+                    transcription_models::picker_models(&language),
+                    ui.picker.leading,
+                ),
             );
             header = header.pl(24.0).child(
                 text(facts::title(&language))
@@ -666,6 +699,7 @@ pub(super) fn parakeet_ultra_fixture(ui: &mut Ui) {
 /// model mid-download.
 pub(super) fn fixture(ui: &mut Ui, downloading: Option<TranscriptionModelId>) {
     ui.picker.open = true;
+    lead_with_active(ui);
     if let (Some(model), Some(view)) = (downloading, ui.view.as_mut()) {
         let bytes = transcription_models::definition(model)
             .download_bytes()
@@ -681,6 +715,20 @@ pub(super) fn fixture(ui: &mut Ui, downloading: Option<TranscriptionModelId>) {
 pub(super) fn all_fixture(ui: &mut Ui) {
     fixture(ui, None);
     ui.picker.view = View::All;
+}
+
+/// The picker with English saved and Whisper, third in English's catalog,
+/// in use beside a downloaded Parakeet.
+pub(super) fn in_use_fixture(ui: &mut Ui) {
+    ui.settings.transcription = TranscriptionSelection {
+        model: TranscriptionModelId::WhisperLargeV3Turbo,
+        language: "en".into(),
+    };
+    ui.picker.installed = Some(vec![
+        TranscriptionModelId::WhisperLargeV3Turbo,
+        TranscriptionModelId::ParakeetUnifiedEnglish,
+    ]);
+    fixture(ui, None);
 }
 
 /// The picker with Japanese saved and Whisper in use; `downloading` shows
@@ -739,6 +787,64 @@ mod tests {
                     .all(|pair| { pair[0].0.name.to_lowercase() <= pair[1].0.name.to_lowercase() })
             );
             assert_eq!(by_name.len(), by_size.len());
+        }
+    }
+
+    #[test]
+    fn leading_moves_one_model_to_the_front_and_keeps_the_rest_in_order() {
+        let catalog = transcription_models::picker_models("en");
+        let third = catalog[2].0.id;
+        let led = led_by(catalog.clone(), Some(third));
+        let mut rest = ids(&catalog);
+        rest.retain(|id| *id != third);
+        assert_eq!(led[0].0.id, third);
+        assert_eq!(ids(&led[1..]), rest);
+        assert_eq!(ids(&led_by(catalog.clone(), None)), ids(&catalog));
+        let first_two = catalog[..2].to_vec();
+        assert_eq!(
+            ids(&led_by(first_two.clone(), Some(third))),
+            ids(&first_two)
+        );
+    }
+
+    fn whisper_in_use(settings: AppSettings) -> Ui {
+        let mut ui = Ui::with(settings, super::super::Service::Fixture(Vec::new()));
+        in_use_fixture(&mut ui);
+        ui
+    }
+
+    #[test]
+    fn only_an_installed_model_in_use_leads() {
+        let mut ui = whisper_in_use(AppSettings::default());
+        open(&mut ui);
+        assert_eq!(
+            ui.picker.leading,
+            Some(TranscriptionModelId::WhisperLargeV3Turbo)
+        );
+        ui.picker.installed = Some(Vec::new());
+        open(&mut ui);
+        assert_eq!(ui.picker.leading, None);
+        assert_eq!(
+            ids(&shown_models(&ui, "en")),
+            ids(&transcription_models::picker_models("en"))
+        );
+    }
+
+    #[test]
+    fn a_sort_by_size_or_name_keeps_its_order() {
+        let mut settings = AppSettings::default();
+        settings.labs.picker_sort_filter = true;
+        let mut ui = whisper_in_use(settings);
+        open(&mut ui);
+        let whisper = TranscriptionModelId::WhisperLargeV3Turbo;
+        assert_eq!(ids(&shown_models(&ui, "en"))[0], whisper);
+        for sort in [Sort::Size, Sort::Name] {
+            ui.picker.sort = sort;
+            assert_eq!(leading(&ui), None);
+            assert_eq!(
+                ids(&shown_models(&ui, "en")),
+                ids(&arranged("en", sort, false))
+            );
         }
     }
 

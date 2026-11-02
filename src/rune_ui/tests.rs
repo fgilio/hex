@@ -1899,6 +1899,95 @@ fn settings_opens_the_picker_and_names_the_model_and_language_apart() {
     assert!(rt.state.picker.open);
 }
 
+/// Where each of `names` first shows in the model picker, in the order
+/// given. Settings behind the picker names the model in use too.
+fn positions(rt: &Runtime<Ui>, names: &[&str]) -> Vec<usize> {
+    let shown: Vec<String> = rt
+        .elements()
+        .into_iter()
+        .filter(|e| e.path.contains("transcription-picker"))
+        .filter_map(|e| e.text)
+        .collect();
+    names
+        .iter()
+        .map(|name| {
+            shown
+                .iter()
+                .position(|text| text == name)
+                .unwrap_or_else(|| panic!("{name} is not shown in {shown:?}"))
+        })
+        .collect()
+}
+
+#[test]
+fn the_picker_leads_with_the_model_in_use_until_it_closes() {
+    let (whisper, parakeet) = (
+        TranscriptionModelId::WhisperLargeV3Turbo,
+        TranscriptionModelId::ParakeetUnifiedEnglish,
+    );
+    let names = ["Whisper large-v3-turbo", "Parakeet Unified English"];
+    let mut rt = runtime("picker-in-use", false, PANE_SIZE);
+    assert_eq!(rt.state.settings.transcription.model, whisper);
+    let whisper_first = |rt: &Runtime<Ui>| {
+        let at = positions(rt, &names);
+        at[0] < at[1]
+    };
+    assert!(whisper_first(&rt), "Compare leads with Whisper");
+    rt.update(|ui, _| picker::show(ui, picker::View::All));
+    settle(&mut rt);
+    assert!(whisper_first(&rt), "every model leads with Whisper");
+    // Parakeet becomes the model in use while the picker stays open.
+    rt.update(|ui, _| ui.settings.transcription.model = parakeet);
+    settle(&mut rt);
+    assert!(whisper_first(&rt), "the rows stay where they were");
+    rt.update(|ui, _| {
+        picker::close(ui);
+        picker::open(ui);
+    });
+    settle(&mut rt);
+    assert!(!whisper_first(&rt), "the next opening leads with Parakeet");
+}
+
+#[test]
+fn an_imported_model_in_use_leads_with_your_model_files() {
+    use crate::transcription::custom_models;
+    use crate::transcription::gguf_header::tests::gguf;
+    use std::sync::atomic::AtomicBool;
+
+    let models = std::env::temp_dir().join(format!("hex-picker-leading-{}", std::process::id()));
+    std::fs::create_dir_all(&models).unwrap();
+    crate::transcription::models::set_test_models_dir(Some(models.clone()));
+    let source = models.join("primeline-Q8_0.gguf");
+    let file = gguf(
+        &[
+            ("general.architecture", "parakeet"),
+            ("general.name", "Parakeet primeLine"),
+            ("stt.variant", "tdt-0.6b-primeline"),
+        ],
+        &[("general.languages", &["en", "de"])],
+        &[],
+        &[("encoder.weight", 8, 64), ("norm", 0, 16)],
+    );
+    std::fs::write(&source, file).unwrap();
+    let id = TranscriptionModelId::Custom(
+        custom_models::import(&source, None, &AtomicBool::new(false)).unwrap(),
+    );
+
+    let mut ui = Ui::with(AppSettings::default(), Service::Fixture(Vec::new()));
+    ui.settings.transcription = TranscriptionSelection {
+        model: id,
+        language: "en".into(),
+    };
+    ui.picker.installed = Some(vec![id]);
+    picker::open(&mut ui);
+    picker::show(&mut ui, picker::View::All);
+    let rt = runtime_for(ui, false, PANE_SIZE);
+    let at = positions(&rt, &["Your model files", "Parakeet primeLine", "English"]);
+    crate::transcription::models::set_test_models_dir(None);
+    let _ = std::fs::remove_dir_all(&models);
+    assert!(at[0] < at[1] && at[1] < at[2], "{at:?}");
+}
+
 #[test]
 fn a_new_install_opens_the_first_run() {
     use crate::desktop::onboarding::{PermissionState, SetupStatus};
@@ -2339,6 +2428,8 @@ fn goldens() {
     check_golden("modes-opencode-not-running", false, PANE_SIZE);
     check_golden("output-trust", false, PANE_SIZE);
     check_golden("picker-custom-models", false, PANE_SIZE);
+    check_golden("picker-in-use", false, PANE_SIZE);
+    check_golden("picker-in-use-all", false, PANE_SIZE);
     check_golden("picker-found", false, PANE_SIZE);
 }
 

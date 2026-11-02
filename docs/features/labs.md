@@ -349,8 +349,9 @@ on. The row renders only in macOS builds, so no golden changes.
 
 Sort and filter models (`picker-sort-filter`, issue 645, every OS): while
 on, the speech model picker's Every model view shows one row between its
-header and the list: a sort (By recommendation, the default and the catalog's order; By
-size, smallest model file first with unknown sizes last; By name) and a
+header and the list: a sort (By recommendation, the default and the catalog's order
+led by the model in use; By size, smallest model file first with unknown sizes
+last; By name) and a
 switch, "Only models that support <saved language>" ("Only models that
 detect the language automatically" when the language is Auto), which keeps
 the models whose `supports_language` accepts it. Both are view state in

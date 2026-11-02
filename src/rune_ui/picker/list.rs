@@ -1,6 +1,7 @@
 //! The picker's second view: every model as one compact row, the ones
-//! that speak the saved language first, your own model files after, and
-//! those that would change the language folded away at the end.
+//! that speak the saved language first, your own model files after (before,
+//! when one of them is in use), and those that would change the language
+//! folded away at the end.
 
 use rune::{El, col, el, row, text};
 use rune_kit::{Badge, ButtonVariant, ControlSize, IconButton, IconButtonVariant};
@@ -37,28 +38,24 @@ pub(super) fn body(ui: &Ui, p: Paint, entries: &[Entry], language: &str) -> El {
         .filter(|entry| !entry.supports && !entry.def.id.is_custom())
         .collect();
 
-    let mut first = true;
-    if !speaking.is_empty() {
-        let heading = if language == AUTO_LANGUAGE {
-            tr("Detect the language").to_owned()
-        } else {
-            language_name(language).to_owned()
-        };
-        body = body.child(group(
-            ui, p, "speaking", &heading, first, &speaking, language,
-        ));
-        first = false;
+    let speaking_heading = if language == AUTO_LANGUAGE {
+        tr("Detect the language")
+    } else {
+        language_name(language)
+    };
+    let mut groups = [
+        ("speaking", speaking_heading, speaking),
+        ("imported", tr("Your model files"), imported),
+    ];
+    if picker::leading(ui).is_some_and(TranscriptionModelId::is_custom) {
+        groups.reverse();
     }
-    if !imported.is_empty() {
-        body = body.child(group(
-            ui,
-            p,
-            "imported",
-            tr("Your model files"),
-            first,
-            &imported,
-            language,
-        ));
+    let mut first = true;
+    for (key, heading, members) in groups {
+        if members.is_empty() {
+            continue;
+        }
+        body = body.child(group(ui, p, key, heading, first, &members, language));
         first = false;
     }
     if !others.is_empty() {

@@ -271,8 +271,10 @@ Checks: `the_picker_lists_every_model_with_the_language_s_recommendations_first`
 `each_model_offers_exactly_the_languages_it_supports`, and the Rune tests
 `a_model_without_the_saved_language_falls_back_to_its_own_visibly`,
 `browsing_the_picker_never_changes_the_language`,
-`changing_only_the_language_prepares_the_same_model_again`, and
-`settings_opens_the_picker_and_names_the_model_and_language_apart`. Scenes:
+`changing_only_the_language_prepares_the_same_model_again`,
+`settings_opens_the_picker_and_names_the_model_and_language_apart`,
+`the_picker_leads_with_the_model_in_use_until_it_closes`, and
+`an_imported_model_in_use_leads_with_your_model_files`. Scenes:
 `picker-japanese`, `picker-japanese-all`, `language-fallback`, `language-menu`. Fixture renders and
 recorded requests only; a live model switch with a fallback has not been
 observed. Apple Speech stays excluded, so its per-locale install through the
@@ -319,10 +321,15 @@ Settings picker > Compare                 // setup.model-card; shared by every d
 │   Download size; one strictly best value is medium weight, ties get none
 ├── Action cell -> exactly one: In use dot, progress with Cancel, Use, or
 │   Download <size>; Primary only on the recommended column when it can be chosen
-├── The model in use or preparing replaces the last column when it would be left out
+├── The model in use when the picker opens -> the first column, until it closes
+├── The model preparing (or in use, chosen elsewhere) replaces the last column
+│   when it would be left out
 └── "{n} more models" -> Every model
 
 Settings picker > Every model row          // fixed height; scrolls
+├── Order -> the model in use when the picker opens first, until it closes; an
+│   imported one moves Your model files above the language's group; Labs >
+│   Sort and filter models by size or name keeps that order
 ├── Name, role, blurb, then "No wait · 1 in 50 words wrong · 25 languages · 2.5 GB"
 ├── Saved language unsupported -> Warning line naming the language it switches to
 ├── Trailing edge -> In use dot; progress with Cancel; else Use/Download; Delete when downloaded
@@ -349,7 +356,8 @@ the artifact; dictation still streams only after the load probe succeeds on a GP
 device ([Streaming Finish](dictation.md#streaming-finish)). The menu bar lists
 names only and shows no tags. Scenes: `hex app -- --snap OUT --scene picker`
 (also `picker-downloading`, `picker-japanese`, `picker-japanese-all`,
-`picker-custom-models`, `picker-found`).
+`picker-custom-models`, `picker-found`, and `picker-in-use`, `picker-in-use-all`
+with Whisper in use ahead of the catalog's order).
 
 Nemotron 3.5 ASR (#834; NVIDIA's `nemotron-3.5-asr-streaming-0.6b`, OpenMDW-1.1)
 streams in 27 of Hex's languages and detects the language with Auto: Hex sends

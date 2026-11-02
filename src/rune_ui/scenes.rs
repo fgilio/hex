@@ -141,6 +141,16 @@ pub(super) const SCENES: &[Scene] = &[
         *ui = portal_fixture();
         picker::fixture(ui, Some(TranscriptionModelId::CohereTranscribe));
     }),
+    // Whisper in use leads both views, ahead of the catalog's order.
+    ("picker-in-use", |ui| {
+        *ui = portal_fixture();
+        picker::in_use_fixture(ui);
+    }),
+    ("picker-in-use-all", |ui| {
+        *ui = portal_fixture();
+        picker::in_use_fixture(ui);
+        ui.picker.view = picker::View::All;
+    }),
     // Labs › Parakeet Ultra: its card's details, credit, and published
     // benchmarks (lists Ultra only where the saved settings turn it on).
     ("picker-parakeet-ultra", |ui| {

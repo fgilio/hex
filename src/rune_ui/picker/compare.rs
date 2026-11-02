@@ -21,9 +21,9 @@ const ROW: f32 = 40.0;
 const ACTION: f32 = 64.0;
 const COLUMNS: usize = 3;
 
-/// The columns: the first three models that speak the language, with the
-/// one being prepared, else the one in use, in the last place when the
-/// three leave it out.
+/// The columns: the first three models that speak the language (the one in
+/// use when the picker opened leads them), with the one being prepared,
+/// else the one in use, in the last place when the three leave it out.
 fn columns(entries: &[Entry]) -> Vec<&Entry> {
     let mut shown: Vec<&Entry> = entries
         .iter()

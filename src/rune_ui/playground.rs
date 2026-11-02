@@ -102,6 +102,11 @@ const PATHS: &[(&str, &str)] = &[
         "picker-downloading",
         "Window/Transcription model/Downloading",
     ),
+    ("picker-in-use", "Window/Transcription model/In use first"),
+    (
+        "picker-in-use-all",
+        "Window/Transcription model/In use first, every model",
+    ),
     (
         "picker-parakeet-ultra",
         "Window/Transcription model/Parakeet Ultra details (Labs)",
